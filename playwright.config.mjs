@@ -1,8 +1,6 @@
 import { defineConfig } from 'playwright-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import stealth from 'playwright-extra-plugin-stealth';
 
 export default defineConfig({
-  plugins: [
-    StealthPlugin()
-  ]
+  plugins: [stealth()]
 });
