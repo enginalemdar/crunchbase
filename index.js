@@ -3,10 +3,10 @@ dotenv.config();
 
 import express from 'express';
 import { chromium } from 'playwright-extra';
-import stealth from 'playwright-extra-plugin-stealth';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 
 // Apply stealth plugin
-chromium.use(stealth());
+chromium.use(StealthPlugin());
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,7 +35,7 @@ app.get('/scrape', async (req, res) => {
 
   try {
     console.log('Navigating to login page...');
-    await page.goto('https://www.crunchbase.com/login', { waitUntil: 'networkidle' });
+    await page.goto('https://www.crunchbase.com/login', { waitUntil: 'networkidle', timeout: 60000 });
 
     console.log('Waiting for potential Cloudflare...');
     await page.waitForTimeout(7000);
@@ -45,12 +45,12 @@ app.get('/scrape', async (req, res) => {
     await page.fill('input[name="password"]', CB_PASS);
     await Promise.all([
       page.click('button[type="submit"]'),
-      page.waitForNavigation({ waitUntil: 'networkidle' })
+      page.waitForNavigation({ waitUntil: 'networkidle', timeout: 60000 })
     ]);
 
     const url = `https://www.crunchbase.com/organization/${encodeURIComponent(targetSlug)}`;
     console.log('Navigating to target page:', url);
-    await page.goto(url, { waitUntil: 'networkidle' });
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
 
     console.log('Extracting data...');
     const result = await page.evaluate(() => {
