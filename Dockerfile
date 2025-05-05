@@ -1,25 +1,26 @@
---- a/Dockerfile
-+++ b/Dockerfile
-@@
- WORKDIR /app
- COPY package*.json ./
-- RUN npm ci --production
-+ # --omit=dev flag ile sadece production bağımlılıklarını yükle
-+ RUN npm install --omit=dev
+# Dockerfile
+FROM node:18-alpine
 
- COPY . .
+WORKDIR /app
 
- # Puppeteer için gerekli paketler
- RUN apk add --no-cache \
-     chromium \
-     nss \
-     freetype \
-     harfbuzz \
-     ca-certificates \
-     ttf-freefont \
-   && rm -rf /var/cache/apk/*
+# Sadece package.json kopyalayıp production bağımlılıklarını yükle
+COPY package.json ./
+RUN npm install --omit=dev
 
- ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
- ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+# Ardından kodunuzu kopyalayın
+COPY . .
 
- CMD ["npm", "start"]
+# Puppeteer için gereken paketler
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+  && rm -rf /var/cache/apk/*
+
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
+CMD ["npm", "start"]
