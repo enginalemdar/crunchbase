@@ -1,24 +1,24 @@
-# Use an Alpine image that already bundles Chromium and Node.js
+# 1) Alpine+Chrome+Node içeren hazır imaj
 FROM zenika/alpine-chrome:with-node
 
-# Set working directory
+# 2) Çalışma dizini
 WORKDIR /app
 
-# Copy only package manifests to leverage Docker layer caching
-COPY package.json package-lock.json ./
+# 3) Sadece package.json'ı kopyala
+COPY package.json ./
 
-# Install only production dependencies
-RUN npm ci --omit=dev
+# 4) Prod bağımlılıkları yükle
+RUN npm install --omit=dev
 
-# Copy the rest of the application
+# 5) Kalan tüm kodu kopyala
 COPY . .
 
-# Expose the port your Express app listens on
+# 6) Express port
 EXPOSE 3000
 
-# Tell Puppeteer where Chromium is
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+# 7) Puppeteer için Chrome yolu
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
-# Launch the app
+# 8) Başlat
 CMD ["npm", "start"]
