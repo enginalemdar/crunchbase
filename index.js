@@ -3,13 +3,17 @@ dotenv.config();
 
 import express from 'express';
 import { chromium } from 'playwright-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+
+// Apply stealth plugin
+chromium.use(StealthPlugin());
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/scrape', async (req, res) => {
-  const targetPath = req.query.path;
-  if (!targetPath) {
+  const target = req.query.path;
+  if (!target) {
     return res.status(400).json({ error: 'Missing required query parameter: path' });
   }
 
@@ -26,32 +30,29 @@ app.get('/scrape', async (req, res) => {
   const page = await context.newPage();
 
   try {
-    // 1) Go to login page
+    // 1. Login
     await page.goto('https://www.crunchbase.com/login', { waitUntil: 'networkidle' });
-    // Wait for potential Cloudflare check
-    await page.waitForTimeout(5000);
-
-    // 2) Perform login
+    await page.waitForTimeout(5000); // Cloudflare check
     await page.fill('input[name="email"]', CB_USER);
     await page.fill('input[name="password"]', CB_PASS);
     await page.click('button[type="submit"]');
     await page.waitForNavigation({ waitUntil: 'networkidle' });
 
-    // 3) Navigate to target organization page
-    const url = `https://www.crunchbase.com/organization/${encodeURIComponent(targetPath)}`;
+    // 2. Scrape target organization
+    const url = `https://www.crunchbase.com/organization/${encodeURIComponent(target)}`;
     await page.goto(url, { waitUntil: 'networkidle' });
     await page.waitForSelector('body');
 
-    // 4) Extract data
-    const data = await page.evaluate(() => {
-      const text = (selector) => {
-        const el = document.querySelector(selector);
-        return el ? el.innerText.trim() : null;
+    // 3. Extract data
+    const result = await page.evaluate(() => {
+      const text = sel => {
+        const e = document.querySelector(sel);
+        return e ? e.innerText.trim() : null;
       };
 
-      const legalName = text('span.component--field-formatter.field-type-legal_name');
-      const status    = text('span.component--field-formatter.field-type-enum');
-      const website   = text('a.component--field-formatter.field-type-link');
+      const legalName    = text('span.component--field-formatter.field-type-legal_name');
+      const status       = text('span.component--field-formatter.field-type-enum');
+      const website      = text('a.component--field-formatter.field-type-link');
       const totalFunding = text('a.component--field-formatter.field-type-money');
 
       const people = Array.from(
@@ -74,7 +75,7 @@ app.get('/scrape', async (req, res) => {
     });
 
     await browser.close();
-    res.json(data);
+    res.json(result);
   } catch (err) {
     await browser.close();
     res.status(500).json({ error: err.message });
