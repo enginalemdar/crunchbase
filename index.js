@@ -1,15 +1,22 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import { chromium } from 'playwright-extra';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const CB_USER = process.env.CRUNCHBASE_EMAIL;
-const CB_PASS = process.env.CRUNCHBASE_PASSWORD;
-const TARGET = 'https://www.crunchbase.com/organization/safebreach';
 
 app.get('/scrape', async (req, res) => {
+  const targetPath = req.query.path;
+  if (!targetPath) {
+    return res.status(400).json({ error: 'Missing required query parameter: path' });
+  }
+
+  const CB_USER = process.env.CRUNCHBASE_EMAIL;
+  const CB_PASS = process.env.CRUNCHBASE_PASSWORD;
   if (!CB_USER || !CB_PASS) {
-    return res.status(500).json({ error: 'CRUNCHBASE_EMAIL ve CRUNCHBASE_PASSWORD tanımlı değil.' });
+    return res.status(500).json({ error: 'CRUNCHBASE_EMAIL or CRUNCHBASE_PASSWORD is not set' });
   }
 
   const browser = await chromium.launch({ headless: true });
@@ -19,69 +26,59 @@ app.get('/scrape', async (req, res) => {
   const page = await context.newPage();
 
   try {
-    // 1) Giriş sayfasına git
+    // 1) Go to login page
     await page.goto('https://www.crunchbase.com/login', { waitUntil: 'networkidle' });
-
-    // 2) Cloudflare kontrolü geçene kadar bekle (ör:  düğme, captcha vb.)
-    //    – Eğer gerçekten captcha varsa, burada manuel müdahale gerekebilir.
+    // Wait for potential Cloudflare check
     await page.waitForTimeout(5000);
 
-    // 3) Email/Şifre gir ve submit
+    // 2) Perform login
     await page.fill('input[name="email"]', CB_USER);
     await page.fill('input[name="password"]', CB_PASS);
     await page.click('button[type="submit"]');
     await page.waitForNavigation({ waitUntil: 'networkidle' });
 
-    // 4) Hedef sayfaya yönlen
-    await page.goto(TARGET, { waitUntil: 'networkidle' });
-    // İçeriğin yüklenmesini bekle
-    await page.waitForSelector('.component--field-formatter[field-type="money"]');
+    // 3) Navigate to target organization page
+    const url = `https://www.crunchbase.com/organization/${encodeURIComponent(targetPath)}`;
+    await page.goto(url, { waitUntil: 'networkidle' });
+    await page.waitForSelector('body');
 
-    // 5) Verileri çek
+    // 4) Extract data
     const data = await page.evaluate(() => {
-      const getText = (sel) => {
-        const el = document.querySelector(sel);
+      const text = (selector) => {
+        const el = document.querySelector(selector);
         return el ? el.innerText.trim() : null;
       };
 
-      // Örnek alanlar
-      const legalName = getText('span.component--field-formatter.field-type-legal_name');
-      const operatingStatus = getText('span.component--field-formatter.field-type-enum');
-      const companyType = getText('span.component--field-formatter.field-type-enum:nth-of-type(2)');
-      const location    = getText('span.component--field-formatter.field-type-enum:nth-of-type(3)');
-      const employeeCount = getText('span.component--field-formatter.field-type-enum:nth-of-type(4)');
-      const website     = getText('a.component--field-formatter.field-type-link');
-      const totalFunding= getText('a.component--field-formatter.field-type-money.accent.highlight-color-contrast-light--link');
+      const legalName = text('span.component--field-formatter.field-type-legal_name');
+      const status    = text('span.component--field-formatter.field-type-enum');
+      const website   = text('a.component--field-formatter.field-type-link');
+      const totalFunding = text('a.component--field-formatter.field-type-money');
 
-      // Key People
-      const people = Array.from(document.querySelectorAll('section:has(h2:contains("Key People")) li')).map(li => {
-        const nameEl = li.querySelector('h3');
-        const titleEl = li.querySelector('p');
-        return {
-          name: nameEl?.innerText.trim() || null,
-          title: titleEl?.innerText.trim() || null
-        };
-      });
+      const people = Array.from(
+        document.querySelectorAll('section:has(h2:contains("Key People")) li')
+      ).map(li => ({
+        name: li.querySelector('h3')?.innerText.trim() || null,
+        title: li.querySelector('p')?.innerText.trim() || null
+      }));
 
-      // Funding Rounds
-      const rounds = Array.from(document.querySelectorAll('section:has(h2:contains("Funding")) .cb-group-item')).map(item => ({
+      const rounds = Array.from(
+        document.querySelectorAll('section:has(h2:contains("Funding")) .cb-group-item')
+      ).map(item => ({
         round: item.querySelector('a.component--field-formatter.field-type-enum')?.innerText.trim() || null,
         amount: item.querySelector('span.component--field-formatter.field-type-money')?.innerText.trim() || null,
         date: item.querySelector('span.component--field-formatter.field-type-date')?.innerText.trim() || null,
-        leadInvestors: Array.from(item.querySelectorAll('a.component--field-formatter.field-type-link')).map(a => a.innerText.trim())
+        investors: Array.from(item.querySelectorAll('a.component--field-formatter.field-type-link')).map(a => a.innerText.trim())
       }));
 
-      return { legalName, operatingStatus, companyType, location, employeeCount, website, totalFunding, people, rounds };
+      return { legalName, status, website, totalFunding, people, rounds };
     });
 
     await browser.close();
     res.json(data);
-
   } catch (err) {
     await browser.close();
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.listen(PORT, () => console.log(`🚀 Server listening on ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
