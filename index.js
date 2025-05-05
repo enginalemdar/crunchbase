@@ -35,9 +35,9 @@ app.get('/scrape', async (req, res) => {
 
   try {
     console.log('Navigating to login page...');
-    // Wait for full network activity to finish so Angular form renders
-    await page.goto('https://www.crunchbase.com/login', { waitUntil: 'networkidle', timeout: 120000 });
-    console.log('Login page loaded, waiting for form fields...');
+    // Load DOM content immediately to avoid waiting on extraneous network calls (Cloudflare heavy assets)
+    await page.goto('https://www.crunchbase.com/login', { waitUntil: 'domcontentloaded', timeout: 120000 });
+    console.log('Login page DOM loaded, waiting for form fields...');
     await page.waitForSelector('input[name="email"]', { visible: true, timeout: 120000 });
     await page.waitForSelector('input[name="password"]', { visible: true, timeout: 120000 });
 
