@@ -35,10 +35,12 @@ app.get('/scrape', async (req, res) => {
 
   try {
     console.log('Navigating to login page...');
-    await page.goto('https://www.crunchbase.com/login', { waitUntil: 'networkidle', timeout: 60000 });
-
-    console.log('Waiting for potential Cloudflare...');
-    await page.waitForTimeout(7000);
+    // Use domcontentloaded to avoid networkidle hangs
+    await page.goto('https://www.crunchbase.com/login', { waitUntil: 'domcontentloaded', timeout: 120000 });
+    console.log('Waiting for login form...');
+    // Wait explicitly for form fields (handles Cloudflare challenge)
+    await page.waitForSelector('input[name="email"]', { timeout: 120000 });
+    await page.waitForSelector('input[name="password"]', { timeout: 120000 });
 
     console.log('Filling credentials...');
     await page.fill('input[name="email"]', CB_USER);
