@@ -3,10 +3,10 @@ dotenv.config();
 
 import express from 'express';
 import { chromium } from 'playwright-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import stealth from 'playwright-extra-plugin-stealth';
 
 // Apply stealth plugin
-chromium.use(StealthPlugin());
+chromium.use(stealth());
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,27 +23,38 @@ app.get('/scrape', async (req, res) => {
     return res.status(500).json({ error: 'CRUNCHBASE_EMAIL or CRUNCHBASE_PASSWORD is not set' });
   }
 
+  // Increase timeouts if needed
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/114.0.0.0 Safari/537.36'
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/114.0.0.0 Safari/537.36',
   });
+  context.setDefaultTimeout(60000);
   const page = await context.newPage();
+  page.setDefaultNavigationTimeout(60000);
+
+  console.log('Starting scraping for:', target);
 
   try {
-    // 1. Login
-    await page.goto('https://www.crunchbase.com/login', { waitUntil: 'networkidle' });
-    await page.waitForTimeout(5000); // Cloudflare check
+    console.log('Navigating to login page...');
+    await page.goto('https://www.crunchbase.com/login', { waitUntil: 'networkidle', timeout: 60000 });
+    console.log('Waiting for potential Cloudflare...');
+    await page.waitForTimeout(7000);
+
+    console.log('Filling credentials...');
     await page.fill('input[name="email"]', CB_USER);
     await page.fill('input[name="password"]', CB_PASS);
-    await page.click('button[type="submit"]');
-    await page.waitForNavigation({ waitUntil: 'networkidle' });
+    await Promise.all([
+      page.click('button[type="submit"]'),
+      page.waitForNavigation({ waitUntil: 'networkidle', timeout: 60000 }),
+    ]);
 
-    // 2. Scrape target organization
     const url = `https://www.crunchbase.com/organization/${encodeURIComponent(target)}`;
-    await page.goto(url, { waitUntil: 'networkidle' });
-    await page.waitForSelector('body');
+    console.log('Navigating to target page:', url);
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+    console.log('Waiting for page content...');
+    await page.waitForSelector('body', { timeout: 60000 });
 
-    // 3. Extract data
+    console.log('Extracting data...');
     const result = await page.evaluate(() => {
       const text = sel => {
         const e = document.querySelector(sel);
@@ -74,9 +85,11 @@ app.get('/scrape', async (req, res) => {
       return { legalName, status, website, totalFunding, people, rounds };
     });
 
+    console.log('Scraping completed.');
     await browser.close();
     res.json(result);
   } catch (err) {
+    console.error('Error during scrape:', err);
     await browser.close();
     res.status(500).json({ error: err.message });
   }
