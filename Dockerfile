@@ -1,24 +1,16 @@
-# 1) Alpine+Chrome+Node içeren hazır imaj
-FROM zenika/alpine-chrome:with-node
+FROM node:18-slim
 
-# 2) Çalışma dizini
-WORKDIR /app
+WORKDIR /usr/src/app
+COPY package*.json ./
+RUN npm install
 
-# 3) Sadece package.json'ı kopyala
-COPY package.json ./
+# Playwright’in gerekli kütüphaneleri
+RUN npx playwright install-deps
+RUN npx playwright install
 
-# 4) Prod bağımlılıkları yükle
-RUN npm install --omit=dev
-
-# 5) Kalan tüm kodu kopyala
 COPY . .
 
-# 6) Express port
+ENV PORT=3000
 EXPOSE 3000
 
-# 7) Puppeteer için Chrome yolu
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
-    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-
-# 8) Başlat
 CMD ["npm", "start"]
